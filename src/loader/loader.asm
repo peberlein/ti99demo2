@@ -86,7 +86,7 @@ TRYSYNC
        MOV  R12,@LI_R12+2 ; Save modified register
        CLR  R12           ; Set CRU base
        TB   2             ; Read VDP interrupt from CRU
-       JNE  LI_R12        ; Return if not set
+       JEQ  LI_R12        ; Return if not set
        MOV  R0,@LI_R0+2   ; Save all modified registers into LI instructions
        MOV  R1,@LI_R1+2
        MOV  R2,@LI_R2+2
@@ -124,7 +124,7 @@ LI_R12 LI   R12,0
 VSYNC
        CLR  R12           ; Set CRU base
 !      TB   2             ; Read VDP interrupt from CRU
-       JNE  -!            ; Loop until set
+       JEQ  -!            ; Loop until set
 VDPINT
        MOVB @VDPSTA,R12   ; Clear VDP status register
 
