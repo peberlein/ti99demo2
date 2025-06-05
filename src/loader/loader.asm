@@ -24,11 +24,12 @@ HDRLEN EQU 30  ; Cartridge header size in all banks
 * Loader Variables
 EFFPTR DATA 0       ; Effect data pointer in cartridge space
 CURBNK DATA BANK0W  ; Current bank pointer
-FCOUNT DATA 0       ; Frame counter
+FCOUNT DATA 0       ; Frame countdown, when reaching zero jumps to LDNEXT
 
 
 * Load the next effect and jump to it
 LDNEXT
+       CLR @FCOUNT    ; Reset frame countdown
        LI R1,>A000    ; copy effect into upper RAM
        MOV R1,R11     ; jump to >A000 after loading
 LDDATA
@@ -80,13 +81,54 @@ QUIT
        BLWP @>0000          ; Reboot
 
 
+* Play the music,
+* Detect keyboard spacebar or quit pressed, and
+* Decrement frame counter, if zero load next effect.
+* (Modifies all registers except R10)
+PlaySong
+       ; Fast keyboard scan routine. Skip to next effect when spacebar is pressed.
+       ; Ripped from http://www.unige.ch/medecine/nouspikel/ti99/tutor1.htm
+       LI   R13,>0000       ; keyboard column 0
+       LI   R12,>0024       ; CRU address of the decoder
+       LDCR R13,3           ; select the column
+       LI   R12,>0006       ; address of the first row
+       STCR R14,8           ; read 8 rows
+       CZC  @KBSPC,R14      ; test spacebar
+       JEQ  LDNEXT          ; pressed
+       CZC  @KBQUIT,R14     ; test quit
+       JEQ  QUIT
+
+       DEC  @FCOUNT         ; Decrement frame counter
+       JEQ  LDNEXT          ; if zero, run next effect
+
+       ; TODO Handle song looping in case it stopped
+
+       B    @SongLoop       ; Play music  (tail-call)
+
+* keyboard control bits
+KBSPC  DATA >0200
+KBQUIT DATA >1100
+
+
 * Test the VDP interrupt and if set, play song
-* Saves all registers
+* (Saves all registers)
 TRYSYNC
        MOV  R12,@LI_R12+2 ; Save modified register
        CLR  R12           ; Set CRU base
        TB   2             ; Read VDP interrupt from CRU
        JEQ  LI_R12        ; Return if not set
+       JMP VDPINT
+
+* Wait until the VDP interrupt and then play song
+* (Saves all registers)
+VSYNC
+       MOV  R12,@LI_R12+2 ; Save modified register
+       CLR  R12           ; Set CRU base
+!      TB   2             ; Read VDP interrupt from CRU
+       JEQ  -!            ; Loop until set
+VDPINT
+       MOVB @VDPSTA,R12   ; Clear VDP status register
+
        MOV  R0,@LI_R0+2   ; Save all modified registers into LI instructions
        MOV  R1,@LI_R1+2
        MOV  R2,@LI_R2+2
@@ -101,7 +143,9 @@ TRYSYNC
        MOV  R13,@LI_R13+2
        MOV  R14,@LI_R14+2
        MOV  R15,@LI_R15+2
-       BL   @VDPINT       ; Handle the interrupt and play song
+
+       BL   @PlaySong     ; Play music, etc.
+
 LI_R0  LI   R0,0          ; Restore all modified registers
 LI_R1  LI   R1,0
 LI_R2  LI   R2,0
@@ -118,36 +162,6 @@ LI_R14 LI   R14,0
 LI_R15 LI   R15,0
 LI_R12 LI   R12,0
        RT
-
-* Wait until the VDP interrupt and then play song
-* Modifies all except R10
-VSYNC
-       CLR  R12           ; Set CRU base
-!      TB   2             ; Read VDP interrupt from CRU
-       JEQ  -!            ; Loop until set
-VDPINT
-       MOVB @VDPSTA,R12   ; Clear VDP status register
-
-* Fast keyboard scan routine. Skip to next effect when spacebar is pressed.
-* Ripped from http://www.unige.ch/medecine/nouspikel/ti99/tutor1.htm
-
-       LI   R13,>0000       ; keyboard column 0
-       LI   R12,>0024       ; CRU address of the decoder
-       LDCR R13,3           ; select the column
-       LI   R12,>0006       ; address of the first row
-       STCR R14,8           ; read 8 rows
-       CZC  @KBSPC,R14      ; test spacebar
-       JEQ  LDNEXT          ; pressed
-       CZC  @KBQUIT,R14     ; test quit
-       JEQ  QUIT
-       
-       INC  @FCOUNT         ; Increment frame counter
-
-       B @SongLoop          ; Play music (tail-call)
-
-* keyboard control bits
-KBSPC  DATA >0200
-KBQUIT DATA >1100
 
 
        ; Dummy macros used by CPlayer
