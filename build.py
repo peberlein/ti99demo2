@@ -7,7 +7,7 @@ import os, sys, re, zipfile
 if len(sys.argv) > 1:
 	effects = ['loader'] + sys.argv[1:]
 else:
-	effects = ['loader', '2-plane-scroll']
+	effects = ['loader', 'loadsong', 'flying-shark-music', '2-plane-scroll']
 	# Add additional effects here! ^^^
 
 

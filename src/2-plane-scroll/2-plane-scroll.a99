@@ -211,10 +211,13 @@ stage_5:
 int_routine:
        clr  r12
        tb   2                          ; Test CRU bit for VDP interrupt
-       jeq  int_routine_2
+       jne  int_routine_0
+       rt
+int_routine_0:
+       .proc
+       bl   @vsync
        lwpi wrksp2
        mov  @wrksp+20,r10
-       bl   @vsync
        abs  @draw_durning_int
        jeq  int_routine_1
        mov  @int,r0
@@ -227,8 +230,7 @@ int_routine:
 int_routine_1:
        inc  @int
        lwpi wrksp
-int_routine_2:
-       rt
+       .endproc
 *// int_routine
 
 *********************************************************************
