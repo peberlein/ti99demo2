@@ -1,0 +1,729 @@
+********************************************************************************
+*
+* Mega demo 2 - 2-plane scroll effect
+*
+       copy "macros.a99"
+       copy "../routines.inc"
+
+**
+* Memory mapped addresses
+*
+vdpwd:                                 ; VDP write data
+       equ  >8c00
+vdpwa:                                 ; VDP set read/write address
+       equ  >8c02
+vdprd:                                 ; VDP read data
+       equ  >8800
+vdpsta:                                ; VDP status
+       equ  >8802
+sound:                                 ; Sound
+       equ  >8400
+spchwt:
+       equ  >9400
+spchrd:
+       equ  >9000
+
+**
+* VDP memory map
+*
+pattern_table:                         ; Pattern table x 4
+       equ  >0000
+sprite_pattern_table:                  ; Sprite pattern table
+       equ  >2000
+name_table:                            ; Name table x 2
+       equ  >2800
+sprite_attr_table:                     ; Sprite attribute table x 2
+       equ  >2b00
+color_table:                           ; Color table
+       equ  >2f00
+
+**
+* Constants
+*
+screen_width_char:
+       equ  32
+screen_height_char:
+       equ  24
+screen_size_char:
+       equ  screen_width_char*screen_height_char
+screen_width:
+       equ  screen_width_char*8
+screen_height:
+       equ  screen_height_char*8
+map_width_char:
+       equ  64
+map_height_char:
+       equ  48
+map_size_char:
+       equ  map_width_char*map_height_char
+map_width:
+       equ  map_width_char*8
+map_height:
+       equ  map_height_char*8
+
+
+**
+* Scratch pad
+*
+pad:
+       equ  >8300
+wrksp:
+       equ  pad                        ; Workspace
+r0lb:
+       equ  wrksp+1
+wrksp2:
+       equ  wrksp+>20
+stack:
+       equ  wrksp2+>20
+**
+* PAD constants
+*
+padcon:
+       equ  stack+>16                  ; Start of pad constants
+one:
+       equ  padcon
+**
+* PAD variables
+*
+padvar:                                ; Start of pad variables
+       equ  one+2
+frame:
+       equ  padvar
+int:
+       equ  frame+2
+double_buffer_flag:
+       equ  int+2
+draw_durning_int:
+       equ  double_buffer_flag+2
+data_set_ptr:
+       equ  draw_durning_int+2
+scroll_x:
+       equ  data_set_ptr+2
+scroll_y:
+       equ  scroll_x+2
+spr_scroll_x:
+       equ  scroll_y+2
+spr_scroll_y:
+       equ  spr_scroll_x+2
+spr_pattern:
+       equ  spr_scroll_y+2
+rom_to_vdp_copy_pad:
+       equ  spr_pattern+2
+buffer:
+       equ  rom_to_vdp_copy_pad+22
+pad_max:
+       equ  buffer+32
+
+********************************************************************************
+*
+* Main program
+*
+       aorg >a000
+main:
+       limi 0                          ; Interrupts off
+       lwpi wrksp                      ; Setup workspace
+       li   r10,stack                  ; Setup stack pointer
+       li   r15,vdpwd
+       mov  r15,@wrksp2+30
+       clr  @int
+       clr  @draw_durning_int
+       bl   @one_time_init
+       clr  @scroll_x
+       clr  @scroll_y
+       clr  @spr_pattern
+*      Stage 1
+stage_1:
+       bl   @vsync
+       bl   @set_vdp_regs
+       bl   @set_scroll_position
+       bl   @vsync
+       bl   @upload_map_screen
+       inc  @frame
+       mov  @frame,r0
+       ci   r0,>c0
+       jne  stage_1
+*      Stage 2
+stage_2:
+       bl   @vsync
+       bl   @set_vdp_regs
+       bl   @set_sprite_pattern
+       bl   @upload_sprites
+       bl   @set_scroll_position
+       bl   @vsync
+       bl   @upload_map_screen
+       inc  @frame
+       mov  @frame,r0
+       ci   r0,>100
+       jne  stage_2
+*      Stage 2
+stage_3:
+       bl   @vsync
+       bl   @set_vdp_regs
+       bl   @upload_sprites
+       bl   @set_scroll_position
+       bl   @vsync
+       bl   @upload_map_screen
+       inc  @frame
+       mov  @frame,r0
+       ci   r0,>200
+       jne  stage_3
+*      Stage 4
+       li   r4,white_colors
+       li   r5,white_colors_size
+       bl   @set_colors
+       seto @draw_durning_int
+       li   r0,data_set_2
+       mov  r0,@data_set_ptr
+       bl   @unpack_data_set
+stage_4:
+       bl   @vsync
+       bl   @set_vdp_regs
+       bl   @upload_sprites
+       bl   @set_scroll_position
+       bl   @vsync
+       bl   @upload_map_screen
+       inc  @frame
+       mov  @frame,r0
+       ci   r0,>300
+       jne  stage_4
+*      Stage 5
+       li   r4,CLRSETC
+       li   r5,CLRNUMB
+       bl   @set_colors
+stage_5:
+       bl   @vsync
+       bl   @set_vdp_regs
+       bl   @upload_sprites
+       bl   @set_scroll_position
+       bl   @vsync
+       bl   @upload_map_screen
+       inc  @frame
+       mov  @frame,r0
+       ci   r0,>400
+       jne  stage_5
+*      End
+       b    @ldnext
+
+*********************************************************************
+*
+* Interrupt routine
+*
+int_routine:
+       clr  r12
+       tb   2                          ; Test CRU bit for VDP interrupt
+       jeq  int_routine_2
+       lwpi wrksp2
+       mov  @wrksp+20,r10
+       bl   @vsync
+       abs  @draw_durning_int
+       jeq  int_routine_1
+       mov  @int,r0
+       andi r0,1
+       jne  int_routine_1
+       bl   @set_vdp_regs
+       bl   @upload_sprites
+       bl   @set_scroll_position
+       inc  @frame
+int_routine_1:
+       inc  @int
+       lwpi wrksp
+int_routine_2:
+       rt
+*// int_routine
+
+*********************************************************************
+*
+* Set VDP regs
+*
+set_vdp_regs:
+       .proc
+*      Name table
+       mov  @double_buffer_flag,r0
+       andi r0,1
+       ori  r0,>0200 + (name_table/>400)
+       bl   @vwtr
+*      Sprite attribute table
+       mov  @double_buffer_flag,r0
+       andi r0,1
+       ori  r0,>0500 + (sprite_attr_table/>80)
+       bl   @vwtr
+*      Pattern table
+       mov  @scroll_x,r0
+       srl  r0,1
+       andi r0,3
+       ori  r0,>0400
+       bl   @vwtr
+*      Flip double buffer
+       inv  @double_buffer_flag
+       .endproc
+*// set_vdp_regs
+
+*********************************************************************
+*
+* Set sprite pattern
+*
+set_sprite_pattern:
+       mov  @frame,r0
+       srl  r0,1
+       andi r0,>001c
+       swpb r0
+       mov  r0,@spr_pattern
+       rt
+*// set_sprite_pattern:
+
+*********************************************************************
+*
+* Upload sprites
+*
+upload_sprites:
+       .proc
+       mov  @double_buffer_flag,r0
+       andi r0,1
+       sla  r0,7
+       ai   r0,sprite_attr_table
+       bl   @vwad
+       li   r4,SL0
+       mov  @spr_scroll_x,r5
+;       andi r5,>fffe
+       mov  @spr_scroll_y,r6
+;       andi r6,>fffe
+upload_sprites_1:
+*      Check y
+       mov  r4,r7
+       mov  *r4+,r0                    ; y on map
+       s    r6,r0                      ; y relative to screen
+       ci   r0,191
+       jgt  upload_sprites_5           ; Done, since list is sorted by y
+       ci   r0,-31
+       jlt  upload_sprites_4
+*      Check x
+       mov  *r4+,r1                    ; x on map
+       s    r5,r1                      ; x relative to screen
+       ci   r1,255
+       jgt  upload_sprites_4
+       ci   r1,-31
+       jlt  upload_sprites_4
+*      Display sprite
+*      y
+       dec  r0                         ; Adjust y to VDP
+       swpb r0
+       movb r0,*r15                    ; Write to VDP
+*      x
+       mov  r1,r0                      ; x
+       jgt  upload_sprites_2
+       ai   r0,32                      ; Adjust for early clock
+upload_sprites_2:
+       swpb r0
+       movb r0,*r15                    ; Write to VDP
+*      Pattern
+       movb @spr_pattern,*r15          ; Write pattern to VDP
+       inct r4
+*      Color and early clock
+       mov  *r4+,r0                    ; Color and early clock
+       mov  r1,r1                      ; Check x
+       jgt  upload_sprites_3
+       ori  r0,>0080                   ; Early clock
+upload_sprites_3:
+       swpb r0
+       movb r0,*r15                    ; Write to VDP
+       jmp  upload_sprites_1
+upload_sprites_4:
+       mov  r7,r4
+       ai   r4,8
+       jmp  upload_sprites_1
+upload_sprites_5:
+       li   r1,>d000
+       movb r1,*r15
+       .endproc
+*// upload_sprites
+
+*********************************************************************
+*
+* Set scroll position
+*
+set_scroll_position:
+       .proc
+       mov  @frame,r2
+       sla  r2,2
+*      Tiles
+       mov  r2,r1
+       bl   @cos
+       sra  r1,1
+       ai   r1,(map_width-screen_width)/2
+       mov  r1,@scroll_x
+       mov  r2,r1
+       bl   @sin
+       sra  r1,2
+       ai   r1,(map_height-screen_height)/2
+       mov  r1,@scroll_y
+*      Sprites
+       ai   r2,56
+       seto r1
+       s    r2,r1
+       bl   @cos
+       sra  r1,1
+       ai   r1,(map_width-screen_width)/2
+       mov  r1,@spr_scroll_x
+       seto r1
+       s    r2,r1
+       bl   @sin
+       sra  r1,2
+       ai   r1,(map_height-screen_height)/2
+       mov  r1,@spr_scroll_y
+       .endproc
+*// set_scroll_position
+
+*********************************************************************
+*
+* Upload map screen to VDP
+*
+upload_map_screen:
+       .proc
+       mov  @double_buffer_flag,r0
+       andi r0,1
+       sla  r0,10
+       ai   r0,name_table
+       bl   @vwad
+*      Calculate source address
+       mov  @scroll_x,r1
+       srl  r1,3
+       mov  @scroll_y,r0
+       srl  r0,3
+       sla  r0,6                       ; * 64
+       a    r0,r1
+       andi r1,>0fff
+       mov  @scroll_y,r0
+       andi r0,6
+       ai   r0,maps
+       a    *r0,r1
+*      Copy to VDP
+       li   r3,screen_height_char
+upload_map_screen_1:
+       li   r2,screen_width_char/8
+       bl   @rom_to_vdp_copy_pad
+       ai   r1,map_width_char-screen_width_char
+       dec  r3
+       jne  upload_map_screen_1
+       .endproc
+*// upload_map_screen
+
+*********************************************************************************
+*
+* One time initializations
+*
+one_time_init:
+       .proc
+       li   r0,1
+       mov  r0,@one
+       li   r0,padvar
+       li   r2,pad_max-padvar
+one_time_init_1:
+       clr  *r0+
+       dect r2
+       jne  one_time_init_1
+       bl   @copy_code_to_scratch_pad
+       bl   @graphics_mode
+       bl   @init_vdp_ram
+       li   r4,white_colors
+       li   r5,white_colors_size
+       bl   @set_colors
+       li   r0,data_set_1
+       mov  r0,@data_set_ptr
+       bl   @unpack_data_set
+       .endproc
+*// one_time_init
+
+*********************************************************************
+*
+* Copy code to scratch pad
+*
+copy_code_to_scratch_pad:
+       .proc
+       li   r0,rom_to_vdp_copy
+       li   r1,rom_to_vdp_copy_pad
+       li   r2,rom_to_vdp_copy_end-rom_to_vdp_copy
+       bl   @copy
+       .endproc
+*// copy_code_to_scratch_pad:
+
+*********************************************************************
+*
+* Copy routine
+*
+copy:
+       mov  *r0+,*r1+
+       dect r2
+       jne  copy
+       rt
+*// copy
+
+*********************************************************************
+*
+* Set graphics mode
+*
+graphics_mode:
+       .proc
+       clr  r0
+       li   r1,vdp_registers
+       li   r2,8
+graphics_mode_1:
+       movb *r1+,@r0lb
+       bl   @vwtr                      ; Set register
+       ai   r0,>0100
+       dec  r2
+       jne  graphics_mode_1
+*      Clear VDP RAM
+       clr  r0
+       clr  r1
+       li   r2,>4000
+       bl   @vsmw
+*      Disable sprites
+       li   r0,sprite_attr_table
+       li   r1,>d000
+       bl   @vsbw
+*      Return
+       .endproc
+*      VDP registers
+vdp_registers:
+       byte >00                        ; Graphics I mode
+       byte >e3                        ; 16K, display on, interrupt enabled, magnify
+       byte name_table/>400            ; Name table
+       byte color_table/>40            ; Color table
+       byte pattern_table/>800         ; Pattern table
+       byte sprite_attr_table/>80      ; Sprite attribute table
+       byte sprite_pattern_table/>800  ; Sprite pattern table
+       byte >01                        ; Backdrop color
+*// graphics_mode
+
+*********************************************************************
+*
+* Init VDP RAM
+*
+init_vdp_ram:
+       .proc
+*      Sprite patterns
+       li   r0,sprite_pattern_table
+       li   r1,SPR4
+       li   r2,8*32
+       bl   @vmbw
+       .endproc
+*// init_vdp_ram
+
+*********************************************************************
+*
+* Unpack data set
+*
+* @data_set_ptr: Data set to unpack
+*
+unpack_data_set:
+       .proc
+*      Patterns
+       mov  @data_set_ptr,r0
+       mov  *r0+,r8
+       mov  *r0+,r9
+       mov  r0,@data_set_ptr
+       bl   @scroll_patterns
+*      Maps
+       mov  @data_set_ptr,r0
+       mov  *r0+,r1
+       mov  r0,@data_set_ptr
+       bl   @offset_maps
+*      Colors
+       mov  @data_set_ptr,r0
+       mov  *r0+,r4
+       mov  *r0+,r5
+       mov  r0,@data_set_ptr
+       bl   @set_colors
+       .endproc
+*// unpack_data_set
+
+*********************************************************************
+*
+* Setup color table
+*
+* r4: Pointer to color set
+* r5: Pointer to color set size
+*
+set_colors:
+       .proc
+       li   r3,4
+       li   r0,color_table
+set_colors_1:
+       mov  r4,r1
+       mov  *r5,r2                 ; Number of color sets
+       bl   @vmbw
+       ai   r0,8
+       dec  r3
+       jne  set_colors_1
+       .endproc
+*// set_colors
+
+*********************************************************************
+*
+* Scroll character patterns
+*
+* r0: Transition chars
+* r1: Patterns
+*
+* r8: Pointer to transition chars
+* r9: Pointer to patterns
+*
+scroll_patterns:
+       .proc
+       clr  r3                         ; Horizontal offset
+scroll_patterns_1:
+       clr  r4                         ; Vertical offset
+scroll_patterns_2:
+       mov  r4,r0                      ; Vertical offset
+       sla  r0,8                       ; * 256
+       mov  r3,r1                      ; Horizontal offset
+       sla  r1,10                      ; * 1024
+       a    r1,r0                      ; Add offsets
+       mov  r0,r13
+;      bl   @vwad                      ; Set VDP address
+       mov  r8,r5                      ; t_chars
+       li   r6,64                      ; Number of patterns to generate
+scroll_patterns_3:
+       mov  r13,r0
+       bl   @vwad                      ; Set VDP address
+*      Copy to buffer
+       movb  *r5+,r0                   ; Index of top left pattern
+       li   r1,buffer
+       bl   @copy_pattern_to_buffer
+       movb  *r5+,r0                   ; Index of top right pattern
+       li   r1,buffer+1
+       bl   @copy_pattern_to_buffer
+       movb  *r5+,r0                   ; Index of bottom left pattern
+       li   r1,buffer+16
+       bl   @copy_pattern_to_buffer
+       movb  *r5+,r0                   ; Index of bottom right pattern
+       li   r1,buffer+17
+       bl   @copy_pattern_to_buffer
+*      Copy to VDP
+       mov  r4,r7                      ; Vertical offset
+       sla  r7,1                       ; *2
+       ai   r7,buffer
+       li   r2,8                       ; Row counter
+scroll_patterns_4:
+       mov  *r7+,r1                    ; Get word
+       mov  r3,r0                      ; Horizontal offset
+       jeq  scroll_patterns_5          ; No shift if zero
+       sla  r1,r0                      ; Shift pattern byte to MSB
+scroll_patterns_5:
+       movb r1,*r15                    ; Write VDP byte
+       dec  r2
+       jne  scroll_patterns_4
+       bl   @int_routine
+       ai   r13,8
+       dec  r6
+       jne  scroll_patterns_3
+       inct r4                         ; Next vertical offset
+       ci   r4,8
+       jlt  scroll_patterns_2
+       inct r3
+       ci   r3,8                       ; Next horizontal offset
+       jlt  scroll_patterns_1
+       .endproc
+*// scroll_patterns
+
+*********************************************************************
+*
+* Copy map with different character offsets
+*
+* r1: Pointer to source map
+*
+offset_maps:
+       .proc
+       li   r0,maps                    ; Source
+       li   r2,4                       ; Number of maps
+       clr  r3                         ; Offset
+offset_maps_1:
+       mov  *r0+,r4                    ; Destination map
+       li   r5,map_size_char
+offset_maps_2:
+       movb *r1+,r6
+       ab   r3,r6
+       movb r6,*r4+
+       bl   @int_routine
+       dec  r5
+       jne  offset_maps_2
+       ai   r1,-map_size_char
+       ai   r3,>4000
+       dec  r2
+       jne  offset_maps_1
+       .endproc
+*// offset_maps
+
+*********************************************************************
+*
+* Copy pattern to buffer
+*
+* r0 MSB: from index
+* r1: destination address
+* r9: patterns base addr
+*
+copy_pattern_to_buffer:
+       srl  r0,8
+       sla  r0,3
+       a    r9,r0                      ; Add patterns base addr
+       li   r2,8
+copy_pattern_to_buffer_1:
+       movb *r0+,*r1
+       inct r1
+       dec  r2
+       jne  copy_pattern_to_buffer_1
+       rt
+*// copy
+
+***************************************************************************
+*
+* Program includes
+*
+       copy "vdp.a99"
+       copy "math.a99"
+
+***************************************************************************
+*
+* Data includes
+*
+       copy "scroll-data.a99"
+       copy "scroll-data-2.a99"
+       copy "sprite-data.a99"
+
+***************************************************************************
+*
+* Data
+*
+data_set_1:
+       data TCHARS
+       data PAT0
+       data MD0
+       data CLRSET
+       data CLRNUM
+data_set_2:
+       data TCHARSB
+       data PAT0B
+       data MD0B
+       data CLRSETB
+       data CLRNUMB
+
+white_colors_size:
+       data 8
+white_colors:
+       byte >ff,>ff,>ff,>ff            ;
+       byte >ff,>ff,>ff,>ff            ;
+
+maps:
+       data map_offset_0
+       data map_offset_64
+       data map_offset_128
+       data map_offset_192
+
+map_offset_0:
+       equ  $
+map_offset_64:
+       equ  map_offset_0+map_size_char
+map_offset_128:
+       equ  map_offset_64+map_size_char
+map_offset_192:
+       equ  map_offset_128+map_size_char

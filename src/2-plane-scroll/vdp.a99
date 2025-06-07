@@ -1,0 +1,59 @@
+*********************************************************************
+*
+* VDP Set Write Address
+*
+* R0: Write address in VDP RAM
+*
+vwad:
+       swpb r0
+       movb r0,@vdpwa                  ; Send low byte of VDP RAM write address
+       swpb r0
+       ori  r0,>4000                   ; Set read/write bits 14 and 15 to write (01)
+       movb r0,@vdpwa                  ; Send high byte of VDP RAM write address
+       rt
+*// vwad
+
+*********************************************************************
+*
+* VDP Single Byte Multiple Write
+*
+* R0: Write address in VDP RAM
+* R1: MSB of R1 sent to VDP RAM
+* R2: Number of bytes to write to VDP RAM
+*
+vsmw:
+       swpb r0
+       movb  r0,@vdpwa                 ; Send low byte of VDP RAM write address
+       swpb r0
+       ori  r0,>4000                   ; Set read/write bits 14 and 15 to write (01)
+       movb r0,@vdpwa                  ; Send high byte of VDP RAM write address
+vsmw_1:
+       movb r1,*r15                    ; Write byte to VDP RAM
+       dec  r2                         ; Byte counter
+       jne  vsmw_1
+       rt
+*// vsmw
+
+*********************************************************************
+*
+* Unrolled VDP copy loop with ROM bank select
+* Should run from scratch pad
+*
+* r1: source address
+* r2: number of groups of 8 to copy
+*
+rom_to_vdp_copy:
+       movb *r1+,*r15                  ; Send byte to VDP
+       movb *r1+,*r15                  ; ...
+       movb *r1+,*r15                  ; ...
+       movb *r1+,*r15                  ; ...
+       movb *r1+,*r15                  ; ...
+       movb *r1+,*r15                  ; ...
+       movb *r1+,*r15                  ; ...
+       movb *r1+,*r15                  ; ...
+       dec  r2                         ; Counter
+       jne  rom_to_vdp_copy            ; Loop
+       rt
+rom_to_vdp_copy_end:
+       equ  $
+*// rom_to_vdp_copy
