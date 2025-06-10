@@ -22,8 +22,9 @@ HDRLEN EQU 30  ; Cartridge header size in all banks
 
 
 * Loader Variables
-EFFPTR DATA 0       ; Effect data pointer in cartridge space
+* (First variable must be non-zero initialized for 32K mem exp check)
 CURBNK DATA BANK0W  ; Current bank pointer
+EFFPTR DATA 0       ; Effect data pointer in cartridge space
 FCOUNT DATA 0       ; Frame countdown, when reaching zero jumps to LDNEXT
 
 

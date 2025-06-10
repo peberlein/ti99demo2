@@ -22,6 +22,8 @@ BANK0W EQU >6000    ; Bank 0 write address
 PRGLST DATA >0000   ; Next program list entry
        DATA START   ; Program start address
        STRI 'MEGADEMO 2'
+
+MSG_32 STRI "32K MEM EXP REQUIRED"
        EVEN
 
 
@@ -38,11 +40,32 @@ START  CLR @BANK0W  ; switch to bank 0
        DEC R2
        JNE -!
 
+       ; Check to see if the loader is there
+       C @>2000,@ETABLE+2
+       JNE NO_32K
+
        ; set variables in loader after copying
        MOV R0,@EFFPTR   ; store the next effect code pointer
        MOV @START+2,@CURBNK  ; store write address for current bank
 
        B @LDNEXT
+
+NO_32K ; show the error message when no 32K
+       LI R14,VDPWA
+       LI R15,VDPWD
+       LI R1,MSG_32
+       LI R0,VDPWM/256  ; pre-SWPB
+       MOVB R0,*R14
+       SWPB R0
+       MOVB R0,*R14
+       MOVB *R1+,R2 ; get the length
+       SRL R2,8     ; low byte
+!      MOVB *R1+,*R15
+       DEC R2
+       JNE -!
+
+       LIMI 2       ; interrupts on
+       JMP $        ; infinite loop
 
 
        ; exported symbols from loader.asm
