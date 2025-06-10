@@ -124,11 +124,11 @@ TRYSYNC
 VSYNC
        MOV  R12,@LI_R12+2 ; Save modified register
        CLR  R12           ; Set CRU base
-!      TB   2             ; Read VDP interrupt from CRU
-       JEQ  -!            ; Loop until set
 VDPINT
-       MOVB @VDPSTA,R12   ; Clear VDP status register
-
+       ; Put as many cycles as we can before the loop that tests for the VDP
+       ; interrupt, because we are likely going to be waiting anyway.
+       ; When trysync jumps here, it will tb 12 again, but it's probably worth
+       ; it to avoid duplicating this register saving code.
        MOV  R0,@LI_R0+2   ; Save all modified registers into LI instructions
        MOV  R1,@LI_R1+2
        MOV  R2,@LI_R2+2
@@ -143,6 +143,10 @@ VDPINT
        MOV  R13,@LI_R13+2
        MOV  R14,@LI_R14+2
        MOV  R15,@LI_R15+2
+
+!      TB   2             ; Read VDP interrupt from CRU
+       JEQ  -!            ; Loop until set
+       MOVB @VDPSTA,R12   ; Clear VDP status register
 
        BL   @PlaySong     ; Play music, etc.
 
