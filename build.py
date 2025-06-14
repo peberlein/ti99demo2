@@ -5,36 +5,44 @@ import os, sys, re, zipfile
 
 # List of effects in the 'src' directory (loader is always first)
 if len(sys.argv) > 1:
-	effects = ['loader'] + sys.argv[1:]
+	effects = sys.argv[1:]
 else:
-	effects = ['loader', 'loadsong', 'flying-shark-music', '2-plane-scroll']
+	effects = [
+		'loadsong', 'flying-shark-music',   # Placeholder music for testing
+		'2-plane-scroll'    # by Asmusr
+	]
 	# Add additional effects here! ^^^
 
 
 # Set xas99 command
 xas99 = 'python ' + os.path.join('tools','xas99.py')
 
+# Build the loader first
+src = os.path.join('src', 'loader', 'loader')
+if os.system(f"{xas99} -b -R -o {src}.bin {src}.asm -S -L {src}.lst") != 0:
+	exit(1)
+# Get the symbols from the loader listing into ROUTINES.INC
+with open(src+'.lst', 'r') as lst:
+	with open(os.path.join('src','routines.inc'), 'w') as inc:
+		for line in lst:
+			match = re.search(r"^    (\w+)\.+ (\>[0-9A-Fa-f]+)", line)
+			if match:
+				inc.write(f"{match.group(1)} EQU {match.group(2)}\n")
 
 # Build each effect if .asm or .a99 file exists, otherwise use .bin file as is.
 for name in effects:
 	src = os.path.join('src', name, name)
-	if name == 'loader':
-		if os.system(f"{xas99} -b -R -o {src}.bin {src}.asm -S -L {src}.lst") != 0:
-			exit(1)
-		# Get the symbols from the loader listing into ROUTINES.INC
-		with open(src+'.lst', 'r') as lst:
-			with open(os.path.join('src','routines.inc'), 'w') as inc:
-				for line in lst:
-					match = re.search(r"^    (\w+)\.+ (\>[0-9A-Fa-f]+)", line)
-					if match:
-						inc.write(f"{match.group(1)} EQU {match.group(2)}\n")
-	elif os.path.exists(src+'.asm'):
+	lst = ""
+	if os.path.exists(src+'.lst'):
+		# Regenerate the listing if it's already there
+		lst = '-L '+src+'.lst'
+	if os.path.exists(src+'.asm'):
 		# Build it
-		if os.system(f"{xas99} -b -R -o {src}.bin {src}.asm") != 0:
+		if os.system(f"{xas99} -b -R -o {src}.bin {src}.asm {lst}") != 0:
 			exit()
 	elif os.path.exists(src+'.a99'):
 		# Build it
-		if os.system(f"{xas99} -b -R -o {src}.bin {src}.a99") != 0:
+		if os.system(f"{xas99} -b -R -o {src}.bin {src}.a99 {lst}") != 0:
 			exit()
 	elif not os.path.exists(src+'.bin'):
 		print(f"Effect {src}.bin not found")
@@ -54,7 +62,7 @@ with open(cart, 'rb') as file:
 with open(cart, 'ab') as file:
 
 	# Write the effect code, wrapping at bank boundaries
-	for name in effects:
+	for name in ['loader'] + effects:
 		src = os.path.join('src', name, name+'.bin')
 		size = os.path.getsize(src)
 		odd = size % 2
