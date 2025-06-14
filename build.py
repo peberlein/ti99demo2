@@ -9,7 +9,8 @@ if len(sys.argv) > 1:
 else:
 	effects = [
 		'loadsong', 'flying-shark-music',   # Placeholder music for testing
-		'2-plane-scroll'    # by Asmusr
+		'2-plane-scroll',   # by Asmusr
+		'sinetext',         # by PeteE
 	]
 	# Add additional effects here! ^^^
 
