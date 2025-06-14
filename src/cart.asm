@@ -22,10 +22,7 @@ BANK0W EQU >6000    ; Bank 0 write address
 PRGLST DATA >0000   ; Next program list entry
        DATA START   ; Program start address
        STRI 'MEGADEMO 2'
-
-MSG_32 STRI "32K MEM EXP REQUIRED"
        EVEN
-
 
 START  CLR @BANK0W  ; switch to bank 0
 
@@ -67,6 +64,8 @@ NO_32K ; show the error message when no 32K
        LIMI 2       ; interrupts on
        JMP $        ; infinite loop
 
+MSG_32 STRI "32K MEM EXP REQUIRED"
+       EVEN
 
        ; exported symbols from loader.asm
        COPY "ROUTINES.INC"
