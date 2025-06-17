@@ -30,35 +30,61 @@ FCOUNT DATA 0       ; Frame countdown, when reaching zero jumps to LDNEXT
 
 * Load the next effect and jump to it
 LDNEXT
-       CLR @FCOUNT    ; Reset frame countdown
+       CLR @FCOUNT    ; Reset frame countdown (can be overridden by effect)
        LI R1,>A000    ; copy effect into upper RAM
        MOV R1,R11     ; jump to >A000 after loading
 LDDATA
+       MOV R11,R12    ; Save return address
+
+       ;LI R0,>0722    ; background color green
+       ;BL @VWTR       ; write register
+
        MOV @CURBNK,R3   ; R3 = current bank
-       CLR *R3          ; Set the bank
+       CLR *R3          ; Set the bank, before reading from EFFPTR
 
        ; Copy R2 words from the current EFFPTR to R1
        MOV @EFFPTR,R0 ; R0 = current code pointer
        MOV *R0+,R2    ; read the next length from the effect table
        JEQ DEMOEND    ; table terminator, end of demo
 
-       ; TODO calculate the minimum until wrapping and tighten the loop
+LDLOOP
+       ; calculate the minimum until wrapping and tighten the loop
+       LI R5,>8000
+       S R0,R5        ; R5 = bytes remaining in bank
+       SRL R5,1       ; R5 = words remaining in bank
 
-       ; copy R2 words from cart bank to R1
+       C R2,R5        ; compare words to copy, to words remaining in bank
+       JL !!          ; jump if doesn't cross bank
+
+       ; remaining is greater/equal: copy to end of cart bank
+       MOV R5,R4   ; copy R4 words from cart bank to R1
 !      MOV *R0+,*R1+
-
-       CI R0,>8000     ; handle wrapping
-       JNE !
+       BL @TRYSYNC     ; Play music if needed
+       DEC R4
+       JNE -!
 
        INCT R3         ; next bank
        CLR *R3         ; switch to bank
        LI R0,>6000+HDRLEN  ; resume after cart header
 
-!      DEC  R2
-       JNE  -!!
+       S R5,R2      ; subtract the number of words copied
+       JEQ LDDONE   ; zero? done
+       JMP LDLOOP   ; non-zero, keep going
+
+       ; copy R2 words from cart bank to R1
+!      MOV *R0+,*R1+
+       BL @TRYSYNC     ; Play music if needed
+       DEC  R2
+       JNE  -!
+LDDONE
        MOV  R0,@EFFPTR   ; store updated code pointer
        MOV  R3,@CURBNK   ; store updated bank
-       RT
+
+       ;LI R0,>0711    ; background color black
+       ;BL @VWTR       ; write register
+
+       B *R12            ; return to saved address
+
 
 * End of demo, quit or loop based on alpha-lock
 DEMOEND
