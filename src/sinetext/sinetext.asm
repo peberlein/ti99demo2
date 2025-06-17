@@ -294,7 +294,7 @@ SHIFTC
 
 VDPINI
        BYTE >02          ; VDP Register 0: 02 (Bitmap Mode)
-       BYTE >82          ; VDP Register 1: Blank, 16x16 Sprites
+       BYTE >A2          ; VDP Register 1: Blank, 16x16 Sprites
        BYTE (SCRTAB/>400); VDP Register 2: Screen Image Table
        BYTE (CLRTAB/>40)+>7F ; VDP Register 3: Color Table
        BYTE (PATTAB/>800)+>3; VDP Register 4: Pattern Table
