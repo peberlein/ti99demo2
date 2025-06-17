@@ -97,7 +97,14 @@ with open(cart, 'ab') as file:
 	end = file.tell()
 	power2 = max(8192, 2**(end-1).bit_length())
 	print(f"Used {end}/{power2} bytes")
-	file.write(b'\0' * (power2 - end))
+
+	# Pad zeros for the current bank
+	file.write(b'\0' * (8192 - (end % 8192)))
+
+	# Write header and zeros for remaining banks
+	while file.tell() < power2:
+		file.write(header)
+		file.write(b'\0' * (8192-len(header)))
 
 
 # Build the .rpk
